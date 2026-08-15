@@ -109,6 +109,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// Serve static assets from frontend build
+const frontendPath = path.join(__dirname, '../../frontend/dist');
+app.use(express.static(frontendPath));
+
+// Wildcard route to serve index.html for React SPA
+app.get('*', (req, res) => {
+  // Let API and Webhook requests fail normally instead of serving HTML
+  if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
+
 // Error handling
 app.use((err, req, res, next) => {
   logger.error(`Unhandled error: ${err.message}`);
