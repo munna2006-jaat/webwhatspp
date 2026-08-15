@@ -1,6 +1,8 @@
 const express = require('express');
 const Contact = require('../models/Contact');
 const auth = require('../middleware/auth');
+const automationService = require('../services/automationService');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -102,10 +104,34 @@ router.put('/:id', auth, async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     });
 
+    const oldContact = await Contact.findById(req.params.id);
+    if (!oldContact) return res.status(404).json({ error: 'Contact not found' });
+
+    const statusChanged = req.body.status !== undefined && oldContact.status !== req.body.status;
+    let tagsChanged = false;
+    if (req.body.tags !== undefined) {
+      const oldTags = oldContact.tags || [];
+      const newTags = req.body.tags || [];
+      if (oldTags.length !== newTags.length || !oldTags.every(t => newTags.includes(t))) {
+        tagsChanged = true;
+      }
+    }
+
     const contact = await Contact.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('assignedTo', 'name avatar');
 
-    if (!contact) return res.status(404).json({ error: 'Contact not found' });
+    if (statusChanged) {
+      automationService.triggerContactAutomations(contact, 'status_change', contact.status).catch(err => {
+        logger.error(`Error triggering status_change automation: ${err.message}`);
+      });
+    }
+
+    if (tagsChanged) {
+      automationService.triggerContactAutomations(contact, 'tag_change', contact.tags).catch(err => {
+        logger.error(`Error triggering tag_change automation: ${err.message}`);
+      });
+    }
+
     res.json({ contact });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -167,6 +193,21 @@ router.post('/bulk-update', auth, async (req, res) => {
         { _id: { $in: contactIds } },
         safeUpdates
       );
+    }
+
+    // Trigger automations for bulk updated contacts
+    const updatedContacts = await Contact.find({ _id: { $in: contactIds } });
+    for (const contact of updatedContacts) {
+      if (updates.status) {
+        automationService.triggerContactAutomations(contact, 'status_change', contact.status).catch(err => {
+          logger.error(`Error triggering status_change automation: ${err.message}`);
+        });
+      }
+      if (updates.addTags) {
+        automationService.triggerContactAutomations(contact, 'tag_change', contact.tags).catch(err => {
+          logger.error(`Error triggering tag_change automation: ${err.message}`);
+        });
+      }
     }
 
     res.json({ message: `${contactIds.length} contacts updated` });

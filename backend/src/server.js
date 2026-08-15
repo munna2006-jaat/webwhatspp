@@ -39,6 +39,10 @@ const webhookService = new WebhookService(io);
 webhookRoutes.setWebhookService(webhookService);
 messageRoutes.setIo(io);
 
+// Initialize AutomationService with Socket.io
+const automationService = require('./services/automationService');
+automationService.setIo(io);
+
 // Middleware
 app.use(cors({
   origin: env.FRONTEND_URL,

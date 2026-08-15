@@ -1,5 +1,7 @@
 const Contact = require('../models/Contact');
 const Message = require('../models/Message');
+const Workspace = require('../models/Workspace');
+const automationService = require('./automationService');
 const logger = require('../utils/logger');
 
 class WebhookService {
@@ -42,12 +44,14 @@ class WebhookService {
       // Find or create contact
       let contact = await Contact.findOne({ phone: from });
       if (!contact) {
+        const defaultWorkspace = await Workspace.findOne();
         contact = await Contact.create({
           phone: from,
           name: profileName,
           status: 'not_connected',
           source: 'whatsapp',
-          isOptedIn: true
+          isOptedIn: true,
+          workspace: defaultWorkspace ? defaultWorkspace._id : undefined
         });
         logger.info(`New contact created: ${from} (${profileName})`);
       } else if (profileName && !contact.name) {
@@ -85,6 +89,11 @@ class WebhookService {
         });
         this.io.emit('contact_updated', contact);
       }
+
+      // Trigger automations
+      automationService.triggerMessageAutomations(contact, savedMessage).catch(err => {
+        logger.error(`Error executing automations for incoming message: ${err.message}`);
+      });
 
       return { contact, message: savedMessage };
     } catch (error) {
