@@ -120,6 +120,13 @@ router.put('/:id', auth, async (req, res) => {
     const contact = await Contact.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('assignedTo', 'name avatar');
 
+    // Self-heal: If contact has no workspace but req.user has one, link it
+    const userWorkspaceId = req.user.workspace?._id || req.user.workspace;
+    if (!contact.workspace && userWorkspaceId) {
+      contact.workspace = userWorkspaceId;
+      await contact.save();
+    }
+
     if (statusChanged) {
       automationService.triggerContactAutomations(contact, 'status_change', contact.status).catch(err => {
         logger.error(`Error triggering status_change automation: ${err.message}`);

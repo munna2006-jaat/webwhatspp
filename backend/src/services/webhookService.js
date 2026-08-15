@@ -16,10 +16,11 @@ class WebhookService {
     for (const entry of body.entry) {
       for (const change of (entry.changes || [])) {
         const value = change.value;
+        const phoneNumberId = value.metadata?.phone_number_id || '';
 
         if (value.messages) {
           for (const message of value.messages) {
-            await this.processIncomingMessage(message, value.contacts);
+            await this.processIncomingMessage(message, value.contacts, phoneNumberId);
           }
         }
 
@@ -33,7 +34,7 @@ class WebhookService {
   }
 
   // Process incoming message
-  async processIncomingMessage(message, contacts) {
+  async processIncomingMessage(message, contacts, phoneNumberId = '') {
     try {
       const from = message.from;
       const contactInfo = contacts?.find(c => c.wa_id === from);
@@ -41,21 +42,36 @@ class WebhookService {
 
       logger.message('incoming', from, message.type);
 
+      // Find workspace by phoneNumberId, fallback to default first workspace
+      let workspace = null;
+      if (phoneNumberId) {
+        workspace = await Workspace.findOne({ phoneNumberId });
+      }
+      if (!workspace) {
+        workspace = await Workspace.findOne();
+      }
+
       // Find or create contact
       let contact = await Contact.findOne({ phone: from });
       if (!contact) {
-        const defaultWorkspace = await Workspace.findOne();
         contact = await Contact.create({
           phone: from,
           name: profileName,
           status: 'not_connected',
           source: 'whatsapp',
           isOptedIn: true,
-          workspace: defaultWorkspace ? defaultWorkspace._id : undefined
+          workspace: workspace ? workspace._id : undefined
         });
         logger.info(`New contact created: ${from} (${profileName})`);
-      } else if (profileName && !contact.name) {
-        contact.name = profileName;
+      } else {
+        if (profileName && !contact.name) {
+          contact.name = profileName;
+        }
+        // Self-heal: link existing contact to workspace if not set
+        if (!contact.workspace && workspace) {
+          contact.workspace = workspace._id;
+          await contact.save();
+        }
       }
 
       // Parse message content
