@@ -42,9 +42,14 @@ export default function AutomationPage() {
 
   const createAutomation = async () => {
     try {
+      const rawKeywords = form.conditions?.keywords;
+      const keywordsArray = typeof rawKeywords === 'string'
+        ? rawKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        : (Array.isArray(rawKeywords) ? rawKeywords : []);
+
       const data = {
         ...form,
-        conditions: { ...form.conditions, keywords: form.conditions.keywords.split(',').map(k => k.trim()).filter(Boolean) },
+        conditions: { ...form.conditions, keywords: keywordsArray },
       };
       await api.post('/automations', data);
       setShowCreate(false);

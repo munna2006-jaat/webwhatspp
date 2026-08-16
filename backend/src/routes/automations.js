@@ -8,7 +8,16 @@ const router = express.Router();
 // GET /api/automations
 router.get('/', auth, async (req, res) => {
   try {
-    const automations = await Automation.find().populate('createdBy', 'name').sort({ priority: -1 });
+    const workspaceId = req.user.workspace?._id || req.user.workspace;
+    const query = workspaceId ? {
+      $or: [
+        { workspace: workspaceId },
+        { workspace: null },
+        { workspace: { $exists: false } }
+      ]
+    } : {};
+    
+    const automations = await Automation.find(query).populate('createdBy', 'name').sort({ priority: -1 });
     res.json({ automations });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -18,9 +27,11 @@ router.get('/', auth, async (req, res) => {
 // POST /api/automations
 router.post('/', auth, roleCheck('admin', 'manager'), async (req, res) => {
   try {
+    const workspaceId = req.user.workspace?._id || req.user.workspace;
     const automation = await Automation.create({
       ...req.body,
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      workspace: workspaceId
     });
     res.status(201).json({ automation });
   } catch (error) {

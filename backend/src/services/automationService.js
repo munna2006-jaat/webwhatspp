@@ -93,16 +93,18 @@ class AutomationService {
   async triggerMessageAutomations(contact, message) {
     try {
       const workspaceId = contact.workspace;
-      if (!workspaceId) {
-        logger.warn(`Contact ${contact.phone} has no workspace assigned. Skipping automations.`);
-        return;
-      }
 
-      // Find all active automations for the workspace
-      const automations = await Automation.find({
+      // Find all active automations for the workspace (or unassigned workspace automations)
+      const query = workspaceId ? {
         isActive: true,
-        workspace: workspaceId
-      }).sort({ priority: -1 });
+        $or: [
+          { workspace: workspaceId },
+          { workspace: null },
+          { workspace: { $exists: false } }
+        ]
+      } : { isActive: true };
+
+      const automations = await Automation.find(query).sort({ priority: -1 });
 
       if (!automations || automations.length === 0) return;
 
@@ -127,7 +129,11 @@ class AutomationService {
         if (automation.trigger === 'keyword') {
           shouldTrigger = this._matchesKeyword(messageBody, automation.conditions);
         } else if (automation.trigger === 'first_message') {
-          shouldTrigger = (contact.conversationCount <= 1);
+          const incomingCount = await Message.countDocuments({
+            contact: contact._id,
+            direction: 'incoming'
+          });
+          shouldTrigger = (incomingCount <= 1 || contact.conversationCount <= 1);
         } else if (automation.trigger === 'off_hours') {
           shouldTrigger = await this._isOffHours(contact);
         }
@@ -161,13 +167,18 @@ class AutomationService {
   async triggerContactAutomations(contact, triggerType, changedValue) {
     try {
       const workspaceId = contact.workspace;
-      if (!workspaceId) return;
 
-      const automations = await Automation.find({
+      const query = workspaceId ? {
         isActive: true,
-        workspace: workspaceId,
-        trigger: triggerType
-      }).sort({ priority: -1 });
+        trigger: triggerType,
+        $or: [
+          { workspace: workspaceId },
+          { workspace: null },
+          { workspace: { $exists: false } }
+        ]
+      } : { isActive: true, trigger: triggerType };
+
+      const automations = await Automation.find(query).sort({ priority: -1 });
 
       if (!automations || automations.length === 0) return;
 
