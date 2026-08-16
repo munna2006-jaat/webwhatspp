@@ -4,13 +4,17 @@ const roleCheck = (...roles) => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        error: `Access denied. Requires one of: ${roles.join(', ')}`
-      });
+    // Check if user is owner of workspace
+    const workspaceOwnerId = req.user.workspace?.owner?._id || req.user.workspace?.owner || req.user.workspace;
+    const isOwner = workspaceOwnerId && workspaceOwnerId.toString() === req.user._id.toString();
+
+    if (isOwner || roles.includes(req.user.role)) {
+      return next();
     }
 
-    next();
+    return res.status(403).json({
+      error: `Access denied. Requires one of: ${roles.join(', ')}`
+    });
   };
 };
 

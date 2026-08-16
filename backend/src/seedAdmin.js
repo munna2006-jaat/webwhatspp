@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const User = require('./models/User');
 const Workspace = require('./models/Workspace');
@@ -13,17 +14,31 @@ async function seedAdmin() {
     await mongoose.connect(env.MONGODB_URI);
     console.log('✅ Connected to MongoDB');
 
-    // Check if admin already exists
+    // Make sure ALL users with ADMIN_EMAIL or existing admin are role: 'admin'
     const existing = await User.findOne({ email: ADMIN_EMAIL });
     if (existing) {
-      // Reset password to the new one
       existing.password = ADMIN_PASSWORD;
+      existing.role = 'admin';
+      
+      // Ensure workspace exists
+      if (!existing.workspace) {
+        let workspace = await Workspace.findOne({ owner: existing._id });
+        if (!workspace) {
+          workspace = await Workspace.create({
+            name: 'MK Global Consultants',
+            owner: existing._id
+          });
+        }
+        existing.workspace = workspace._id;
+      }
+
       await existing.save();
       console.log('');
-      console.log('✅ Admin password has been reset!');
+      console.log('✅ Admin user updated successfully! Role set to admin.');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`📧 Email:    ${ADMIN_EMAIL}`);
       console.log(`🔑 Password: ${ADMIN_PASSWORD}`);
+      console.log(`🛡️ Role:     ${existing.role}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('');
       process.exit(0);

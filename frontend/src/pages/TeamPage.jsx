@@ -28,14 +28,23 @@ export default function TeamPage() {
   };
 
   const updateRole = async (id, role) => {
-    await api.put(`/team/${id}`, { role });
-    fetchMembers();
+    try {
+      await api.put(`/team/${id}`, { role });
+      fetchMembers();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update role');
+      fetchMembers();
+    }
   };
 
   const deleteMember = async (id) => {
     if (!confirm('Remove this team member?')) return;
-    await api.delete(`/team/${id}`);
-    fetchMembers();
+    try {
+      await api.delete(`/team/${id}`);
+      fetchMembers();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to remove member');
+    }
   };
 
   return (
